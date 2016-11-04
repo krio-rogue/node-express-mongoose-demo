@@ -1,28 +1,73 @@
+'use strict';
 
 /**
  * Module dependencies.
  */
 
-var mongoose = require('mongoose')
-  , User = mongoose.model('User')
-  , utils = require('../../lib/utils')
+const mongoose = require('mongoose');
+const { wrap: async } = require('co');
+const { respond } = require('../utils');
+const User = mongoose.model('User');
 
-var login = function (req, res) {
-  if (req.session.returnTo) {
-    res.redirect(req.session.returnTo)
-    delete req.session.returnTo
-    return
+/**
+ * Load
+ */
+
+exports.load = async(function* (req, res, next, _id) {
+  const criteria = { _id };
+  try {
+    req.profile = yield User.load({ criteria });
+    if (!req.profile) return next(new Error('User not found'));
+  } catch (err) {
+    return next(err);
   }
-  res.redirect('/')
-}
+  next();
+});
 
-exports.signin = function (req, res) {}
+/**
+ * Create user
+ */
+
+exports.create = async(function* (req, res) {
+  const user = new User(req.body);
+  user.provider = 'local';
+  try {
+    yield user.save();
+    req.logIn(user, err => {
+      if (err) req.flash('info', 'Sorry! We are not able to log you in!');
+      return res.redirect('/');
+    });
+  } catch (err) {
+    const errors = Object.keys(err.errors)
+      .map(field => err.errors[field].message);
+
+    res.render('users/signup', {
+      title: 'Sign up',
+      errors,
+      user
+    });
+  }
+});
+
+/**
+ *  Show profile
+ */
+
+exports.show = function (req, res) {
+  const user = req.profile;
+  respond(res, 'users/show', {
+    title: user.name,
+    user: user
+  });
+};
+
+exports.signin = function () {};
 
 /**
  * Auth callback
  */
 
-exports.authCallback = login
+exports.authCallback = login;
 
 /**
  * Show login form
@@ -30,10 +75,9 @@ exports.authCallback = login
 
 exports.login = function (req, res) {
   res.render('users/login', {
-    title: 'Login',
-    message: req.flash('error')
-  })
-}
+    title: 'Login'
+  });
+};
 
 /**
  * Show sign up form
@@ -43,71 +87,32 @@ exports.signup = function (req, res) {
   res.render('users/signup', {
     title: 'Sign up',
     user: new User()
-  })
-}
+  });
+};
 
 /**
  * Logout
  */
 
 exports.logout = function (req, res) {
-  req.logout()
-  res.redirect('/login')
-}
+  req.logout();
+  res.redirect('/login');
+};
 
 /**
  * Session
  */
 
-exports.session = login
+exports.session = login;
 
 /**
- * Create user
+ * Login
  */
 
-exports.create = function (req, res) {
-  var user = new User(req.body)
-  user.provider = 'local'
-  user.save(function (err) {
-    if (err) {
-      return res.render('users/signup', {
-        errors: utils.errors(err.errors),
-        user: user,
-        title: 'Sign up'
-      })
-    }
-
-    // manually login the user once successfully signed up
-    req.logIn(user, function(err) {
-      if (err) return next(err)
-      return res.redirect('/')
-    })
-  })
-}
-
-/**
- *  Show profile
- */
-
-exports.show = function (req, res) {
-  var user = req.profile
-  res.render('users/show', {
-    title: user.name,
-    user: user
-  })
-}
-
-/**
- * Find user by id
- */
-
-exports.user = function (req, res, next, id) {
-  User
-    .findOne({ _id : id })
-    .exec(function (err, user) {
-      if (err) return next(err)
-      if (!user) return next(new Error('Failed to load User ' + id))
-      req.profile = user
-      next()
-    })
+function login (req, res) {
+  const redirectTo = req.session.returnTo
+    ? req.session.returnTo
+    : '/';
+  delete req.session.returnTo;
+  res.redirect(redirectTo);
 }

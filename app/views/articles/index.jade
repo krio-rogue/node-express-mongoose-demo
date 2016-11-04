@@ -6,32 +6,11 @@ block main
 block content
   - if (articles.length)
     - each article in articles
-      .article
-        h3
-          a(href='/articles/'+article._id, title=article.title) #{article.title}
-        p= article.body
-
-        .meta.muted
-          span= formatDate(article.createdAt)
-          &nbsp; - &nbsp;
-          - if (article.user)
-            span Author &nbsp;
-
-            - var name = article.user.name ? article.user.name : article.user.username
-
-            a(href="/users/"+article.user._id)= name
-          &nbsp; - &nbsp;
-          - if (article.tags)
-            - each tag in article.tags.split(',')
-              &nbsp;
-              a.tag(href="/tags/"+tag)
-                i.icon-tags
-                |  #{tag}
+      include article
 
     - if (pages > 1)
-      .pagination
-        ul
-          != createPagination(pages, page)
+      ul.pagination
+        != createPagination(pages, page)
   - else
-    p.muted No articles.&nbsp;
+    h4.muted No articles.&nbsp;
       a(href="/articles/new") create one

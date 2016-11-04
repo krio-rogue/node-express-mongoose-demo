@@ -4,7 +4,7 @@ block main
   h1= title
 
 block content
-  each article in articles
+  - each article in articles
     .article
       h3
         a(href='/articles/'+article._id, title=article.title) #{article.title}
@@ -12,7 +12,7 @@ block content
 
       .meta.muted
         span= formatDate(article.createdAt)
-        &nbsp; - &nbsp;
+        | &nbsp; - &nbsp;
         span Author &nbsp;
 
         - var name = article.user.name ? article.user.name : article.user.username
@@ -21,12 +21,11 @@ block content
         &nbsp; - &nbsp;
         - if (article.tags)
           - each tag in article.tags.split(',')
-            &nbsp;
+            | &nbsp;
             a.tag(href="/tags/"+tag)
               i.icon-tags
               |  #{tag}
 
-  if (pages > 1)
-    .pagination
-      ul
-        != createPagination(pages, page)
+  - if (pages > 1)
+    ul.pagination
+      != createPagination(pages, page)

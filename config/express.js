@@ -1,116 +1,118 @@
+'use strict';
 
 /**
  * Module dependencies.
  */
 
-var express = require('express')
-  , mongoStore = require('connect-mongo')(express)
-  , flash = require('connect-flash')
-  , helpers = require('view-helpers')
-  , pkg = require('../package.json')
+const express = require('express');
+const session = require('express-session');
+const compression = require('compression');
+const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const cookieSession = require('cookie-session');
+const bodyParser = require('body-parser');
+const methodOverride = require('method-override');
+const csrf = require('csurf');
+const cors = require('cors');
+const upload = require('multer')();
 
-module.exports = function (app, config, passport) {
+const mongoStore = require('connect-mongo')(session);
+const flash = require('connect-flash');
+const winston = require('winston');
+const helpers = require('view-helpers');
+const config = require('./');
+const pkg = require('../package.json');
 
-  app.set('showStackError', true)
+const env = process.env.NODE_ENV || 'development';
 
-  // should be placed before express.static
-  app.use(express.compress({
-    filter: function (req, res) {
-      return /json|text|javascript|css/.test(res.getHeader('Content-Type'))
-    },
-    level: 9
-  }))
+/**
+ * Expose
+ */
 
-  app.use(express.favicon())
-  app.use(express.static(config.root + '/public'))
+module.exports = function (app, passport) {
 
-  // don't use logger for test env
-  if (process.env.NODE_ENV !== 'test') {
-    app.use(express.logger('dev'))
+  // Compression middleware (should be placed before express.static)
+  app.use(compression({
+    threshold: 512
+  }));
+
+  app.use(cors());
+
+  // Static files middleware
+  app.use(express.static(config.root + '/public'));
+
+  // Use winston on production
+  let log = 'dev';
+  if (env !== 'development') {
+    log = {
+      stream: {
+        write: message => winston.info(message)
+      }
+    };
   }
 
+  // Don't log during tests
+  // Logging middleware
+  if (env !== 'test') app.use(morgan(log));
+
   // set views path, template engine and default layout
-  app.set('views', config.root + '/app/views')
-  app.set('view engine', 'jade')
+  app.set('views', config.root + '/app/views');
+  app.set('view engine', 'jade');
 
-  app.configure(function () {
-    // expose package.json to views
-    app.use(function (req, res, next) {
-      res.locals.pkg = pkg
-      next()
-    })
+  // expose package.json to views
+  app.use(function (req, res, next) {
+    res.locals.pkg = pkg;
+    res.locals.env = env;
+    next();
+  });
 
-    // cookieParser should be above session
-    app.use(express.cookieParser())
-
-    // bodyParser should be above methodOverride
-    app.use(express.bodyParser())
-    app.use(express.methodOverride())
-
-    // express/mongo session storage
-    app.use(express.session({
-      secret: 'noobjs',
-      store: new mongoStore({
-        url: config.db,
-        collection : 'sessions'
-      })
-    }))
-
-    // use passport session
-    app.use(passport.initialize())
-    app.use(passport.session())
-
-    // connect flash for flash messages - should be declared after sessions
-    app.use(flash())
-
-    // should be declared after session and flash
-    app.use(helpers(pkg.name))
-
-    // adds CSRF support
-    if (process.env.NODE_ENV !== 'test') {
-      app.use(express.csrf())
-
-      // This could be moved to view-helpers :-)
-      app.use(function(req, res, next){
-        res.locals.csrf_token = req.csrfToken()
-        next()
-      })
+  // bodyParser should be above methodOverride
+  app.use(bodyParser.json());
+  app.use(bodyParser.urlencoded({ extended: true }));
+  app.use(upload.single('image'));
+  app.use(methodOverride(function (req) {
+    if (req.body && typeof req.body === 'object' && '_method' in req.body) {
+      // look in urlencoded POST bodies and delete it
+      var method = req.body._method;
+      delete req.body._method;
+      return method;
     }
+  }));
 
-    // routes should be at the last
-    app.use(app.router)
-
-    // assume "not found" in the error msgs
-    // is a 404. this is somewhat silly, but
-    // valid, you can do whatever you like, set
-    // properties, use instanceof etc.
-    app.use(function(err, req, res, next){
-      // treat as 404
-      if (err.message
-        && (~err.message.indexOf('not found')
-        || (~err.message.indexOf('Cast to ObjectId failed')))) {
-        return next()
-      }
-
-      // log it
-      // send emails if you want
-      console.error(err.stack)
-
-      // error page
-      res.status(500).render('500', { error: err.stack })
+  // CookieParser should be above session
+  app.use(cookieParser());
+  app.use(cookieSession({ secret: 'secret' }));
+  app.use(session({
+    resave: false,
+    saveUninitialized: true,
+    secret: pkg.name,
+    store: new mongoStore({
+      url: config.db,
+      collection : 'sessions'
     })
+  }));
 
-    // assume 404 since no middleware responded
-    app.use(function(req, res, next){
-      res.status(404).render('404', {
-        url: req.originalUrl,
-        error: 'Not found'
-      })
-    })
-  })
+  // use passport session
+  app.use(passport.initialize());
+  app.use(passport.session());
 
-  // development env config
-  app.configure('development', function () {
-    app.locals.pretty = true
-  })
-}
+  // connect flash for flash messages - should be declared after sessions
+  app.use(flash());
+
+  // should be declared after session and flash
+  app.use(helpers(pkg.name));
+
+  if (env !== 'test') {
+    app.use(csrf());
+
+    // This could be moved to view-helpers :-)
+    app.use(function (req, res, next) {
+      res.locals.csrf_token = req.csrfToken();
+      next();
+    });
+  }
+
+  if (env === 'development') {
+    app.locals.pretty = true;
+  }
+};

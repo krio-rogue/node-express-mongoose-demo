@@ -1,27 +1,25 @@
+'use strict';
 
 /**
  * Module dependencies.
  */
 
-var mongoose = require('mongoose')
-  , async = require('async')
-  , Article = mongoose.model('Article')
-  , User = mongoose.model('User')
+const mongoose = require('mongoose');
+const Article = mongoose.model('Article');
+const User = mongoose.model('User');
+const co = require('co');
 
 /**
  * Clear database
  *
- * @param {Function} done
+ * @param {Object} t<Ava>
  * @api public
  */
 
-exports.clearDb = function (done) {
-  async.parallel([
-    function (cb) {
-      User.collection.remove(cb)
-    },
-    function (cb) {
-      Article.collection.remove(cb)
-    }
-  ], done)
-}
+exports.cleanup = function (t) {
+  co(function* () {
+    yield User.remove();
+    yield Article.remove();
+    t.end();
+  });
+};

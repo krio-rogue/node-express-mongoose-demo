@@ -1,52 +1,56 @@
+'use strict';
 
-/*!
+/*
  * nodejs-express-mongoose-demo
  * Copyright(c) 2013 Madhusudhan Srinivasa <madhums8@gmail.com>
  * MIT Licensed
  */
 
 /**
- * Module dependencies.
+ * Module dependencies
  */
 
-var express = require('express')
-  , fs = require('fs')
-  , passport = require('passport')
+require('dotenv').config();
+
+const fs = require('fs');
+const join = require('path').join;
+const express = require('express');
+const mongoose = require('mongoose');
+const passport = require('passport');
+const config = require('./config');
+
+const models = join(__dirname, 'app/models');
+const port = process.env.PORT || 3000;
+const app = express();
 
 /**
- * Main application entry file.
- * Please note that the order of loading is important.
+ * Expose
  */
 
-// Load configurations
-// if test env, load example file
-var env = process.env.NODE_ENV || 'development'
-  , config = require('./config/config')[env]
-  , mongoose = require('mongoose')
-
-// Bootstrap db connection
-mongoose.connect(config.db)
+module.exports = app;
 
 // Bootstrap models
-var models_path = __dirname + '/app/models'
-fs.readdirSync(models_path).forEach(function (file) {
-  if (~file.indexOf('.js')) require(models_path + '/' + file)
-})
-
-// bootstrap passport config
-require('./config/passport')(passport, config)
-
-var app = express()
-// express settings
-require('./config/express')(app, config, passport)
+fs.readdirSync(models)
+  .filter(file => ~file.search(/^[^\.].*\.js$/))
+  .forEach(file => require(join(models, file)));
 
 // Bootstrap routes
-require('./config/routes')(app, passport)
+require('./config/passport')(passport);
+require('./config/express')(app, passport);
+require('./config/routes')(app, passport);
 
-// Start the app by listening on <port>
-var port = process.env.PORT || 3000
-app.listen(port)
-console.log('Express app started on port '+port)
+connect()
+  .on('error', console.log)
+  .on('disconnected', connect)
+  .once('open', listen);
 
-// expose app
-exports = module.exports = app
+function listen () {
+  if (app.get('env') === 'test') return;
+  app.listen(port);
+  console.log('Express app started on port ' + port);
+}
+
+function connect () {
+  var options = { server: { socketOptions: { keepAlive: 1 } } };
+  return mongoose.connect(config.db, options).connection;
+}
